@@ -4,7 +4,18 @@ import React from 'react';
 interface ScheduleFormProps {
   periodo: string;
   setPeriodo: (value: string) => void;
+  modulo: string;
+  setModulo: (value: string) => void;
+  grupo: string;
+  setGrupo: (value: string) => void;
+  eletiva: string;
+  setEletiva: (value: string) => void;
+  
   availablePeriods: string[];
+  availableModulos: string[];
+  availableGrupos: string[];
+  availableEletivas: string[];
+  
   onSearch: () => void;
   isLoading: boolean;
 }
@@ -16,7 +27,8 @@ const SelectInput: React.FC<{
   options: string[];
   id: string;
   disabled?: boolean;
-}> = ({ label, value, onChange, options, id, disabled = false }) => (
+  placeholder?: string;
+}> = ({ label, value, onChange, options, id, disabled = false, placeholder = "Todas" }) => (
   <div className="flex flex-col">
     <label htmlFor={id} className="mb-2 text-sm font-medium text-gray-400">{label}</label>
     <select
@@ -26,7 +38,7 @@ const SelectInput: React.FC<{
       disabled={disabled}
       className="w-full p-3 bg-slate-700 text-gray-200 border border-slate-600 rounded-lg shadow-sm focus:ring-2 focus:ring-afya-blue focus:border-afya-blue focus:bg-slate-600 transition duration-150 ease-in-out appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {options.length === 0 && <option>Nenhuma opção</option>}
+      <option value="">{placeholder}</option>
       {options.map(option => (
         <option key={option} value={option}>{option}</option>
       ))}
@@ -37,7 +49,16 @@ const SelectInput: React.FC<{
 const ScheduleForm: React.FC<ScheduleFormProps> = ({
   periodo,
   setPeriodo,
+  modulo,
+  setModulo,
+  grupo,
+  setGrupo,
+  eletiva,
+  setEletiva,
   availablePeriods,
+  availableModulos,
+  availableGrupos,
+  availableEletivas,
   onSearch,
   isLoading,
 }) => {
@@ -50,19 +71,61 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
   return (
     <div className="bg-slate-800 p-6 md:p-8 rounded-lg shadow-lg border border-slate-700">
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-200 mb-4">Selecione o Período</h3>
-          <SelectInput
-              id="periodo"
-              label="Período"
-              value={periodo}
-              onChange={(e) => setPeriodo(e.target.value)}
-              options={availablePeriods}
-              disabled={availablePeriods.length === 0}
-            />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Período */}
+            <div>
+                <SelectInput
+                    id="periodo"
+                    label="Período (Obrigatório)"
+                    value={periodo}
+                    onChange={(e) => setPeriodo(e.target.value)}
+                    options={availablePeriods}
+                    disabled={availablePeriods.length === 0}
+                    placeholder="Selecione..."
+                />
+            </div>
+
+            {/* Módulo */}
+            <div>
+                <SelectInput
+                    id="modulo"
+                    label="Módulo (Opcional)"
+                    value={modulo}
+                    onChange={(e) => setModulo(e.target.value)}
+                    options={availableModulos}
+                    disabled={!periodo || availableModulos.length === 0}
+                    placeholder="Todos os módulos"
+                />
+            </div>
+
+             {/* Grupo */}
+             <div>
+                <SelectInput
+                    id="grupo"
+                    label="Grupo (Opcional)"
+                    value={grupo}
+                    onChange={(e) => setGrupo(e.target.value)}
+                    options={availableGrupos}
+                    disabled={!periodo || availableGrupos.length === 0}
+                    placeholder="Todos os grupos"
+                />
+            </div>
+            
+            {/* Eletiva */}
+            <div>
+                <SelectInput
+                    id="eletiva"
+                    label="Eletiva (Opcional)"
+                    value={eletiva}
+                    onChange={(e) => setEletiva(e.target.value)}
+                    options={availableEletivas}
+                    disabled={availableEletivas.length === 0}
+                    placeholder="Nenhuma"
+                />
+            </div>
         </div>
         
-        <div className="mt-2">
+        <div className="mt-4">
             <button
               type="submit"
               disabled={isLoading || !periodo}

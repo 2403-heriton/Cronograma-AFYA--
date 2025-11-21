@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useEffect, lazy, Suspense } from 'react';
-import { fetchSchedule, fetchEvents, initializeAndLoadData, getUniquePeriods } from './services/scheduleService';
+import { fetchSchedule, fetchEvents, initializeAndLoadData, getUniquePeriods, getUniqueModulos, getUniqueGrupos, getUniqueEletivas } from './services/scheduleService';
 import type { Schedule, Event, AulaEntry, EletivaEntry } from './types';
 import ScheduleForm from './components/ScheduleForm';
 import SpinnerIcon from './components/icons/SpinnerIcon';
@@ -26,11 +26,20 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [allAulas, setAllAulas] = useState<AulaEntry[]>([]);
   const [allEvents, setAllEvents] = useState<Event[]>([]);
-  // allEletivas mantido para integridade do DataUploader, embora não usado na busca simplificada
   const [allEletivas, setAllEletivas] = useState<EletivaEntry[]>([]);
 
+  // Filtros e Listas de Opções
   const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
   const [periodo, setPeriodo] = useState<string>('');
+
+  const [availableModulos, setAvailableModulos] = useState<string[]>([]);
+  const [modulo, setModulo] = useState<string>('');
+
+  const [availableGrupos, setAvailableGrupos] = useState<string[]>([]);
+  const [grupo, setGrupo] = useState<string>('');
+
+  const [availableEletivas, setAvailableEletivas] = useState<string[]>([]);
+  const [eletiva, setEletiva] = useState<string>('');
   
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [events, setEvents] = useState<Event[] | null>([]);
@@ -71,6 +80,12 @@ const App: React.FC = () => {
             } else {
                  setError("Nenhum dado de aulas encontrado. Por favor, use o modo de administrador para carregar uma planilha.");
             }
+            
+            if (eletivas.length > 0) {
+                const uniqueEletivas = getUniqueEletivas(eletivas);
+                setAvailableEletivas(uniqueEletivas);
+            }
+
         } catch (err) {
             console.error("Erro ao carregar dados iniciais:", err);
             const error = err as Error;
@@ -82,6 +97,32 @@ const App: React.FC = () => {
     
     loadInitialData();
   }, []);
+
+  // Effect: Atualiza Módulos quando Período muda
+  useEffect(() => {
+    if (periodo) {
+        const mods = getUniqueModulos(periodo, allAulas);
+        setAvailableModulos(mods);
+        setModulo(''); // Reseta seleção
+        setGrupo(''); // Reseta seleção
+    } else {
+        setAvailableModulos([]);
+        setModulo('');
+        setGrupo('');
+    }
+  }, [periodo, allAulas]);
+
+  // Effect: Atualiza Grupos quando Período ou Módulo muda
+  useEffect(() => {
+    if (periodo) {
+        const grps = getUniqueGrupos(periodo, modulo, allAulas);
+        setAvailableGrupos(grps);
+        setGrupo(''); // Reseta seleção
+    } else {
+        setAvailableGrupos([]);
+    }
+  }, [periodo, modulo, allAulas]);
+
 
   const handlePeriodoChange = (newPeriodo: string) => {
     setPeriodo(newPeriodo);
@@ -101,13 +142,14 @@ const App: React.FC = () => {
     setView('schedule');
 
     try {
-      const scheduleResult = fetchSchedule(periodo, allAulas);
+      // Passa os novos filtros para a função de busca
+      const scheduleResult = fetchSchedule(periodo, allAulas, modulo, grupo, eletiva, allEletivas);
       const eventsResult = fetchEvents(periodo, allEvents);
 
       setSchedule(scheduleResult);
       setEvents(eventsResult);
 
-      // Salvar busca no localStorage
+      // Salvar busca no localStorage (Apenas o período por enquanto, para simplificar a UX de retorno)
       localStorage.setItem(LAST_SEARCH_PERIODO_KEY, periodo);
       
     } catch (err) {
@@ -117,12 +159,16 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [periodo, allAulas, allEvents]);
+  }, [periodo, modulo, grupo, eletiva, allAulas, allEvents, allEletivas]);
   
   const handleUploadSuccess = (data: UploadData) => {
     setAllAulas(data.aulasData);
     setAllEvents(data.eventsData);
     setAllEletivas(data.eletivasData);
+    
+    // Atualiza lista de eletivas
+    setAvailableEletivas(getUniqueEletivas(data.eletivasData));
+
     // Força a recarga dos dados e re-renderização
     setPeriodo(''); // Reseta para acionar o useEffect de período
     setTimeout(() => {
@@ -252,7 +298,16 @@ const App: React.FC = () => {
                           <ScheduleForm
                             periodo={periodo}
                             setPeriodo={handlePeriodoChange}
+                            modulo={modulo}
+                            setModulo={setModulo}
+                            grupo={grupo}
+                            setGrupo={setGrupo}
+                            eletiva={eletiva}
+                            setEletiva={setEletiva}
                             availablePeriods={availablePeriods}
+                            availableModulos={availableModulos}
+                            availableGrupos={availableGrupos}
+                            availableEletivas={availableEletivas}
                             onSearch={handleSearch}
                             isLoading={isLoading}
                           />

@@ -148,6 +148,14 @@ export const formatGroupLabel = (groups: string[]): string => {
         return res;
     };
 
+    // Helper para juntar listas com "," e "e" (Ex: 1, 2 e 4)
+    const joinList = (items: string[]): string => {
+        if (items.length === 0) return "";
+        if (items.length === 1) return items[0];
+        const last = items.pop();
+        return items.join(", ") + " e " + last;
+    };
+
     // Process Alpha Ranges First (Usually Group A comes before Group 1 in lists)
     if (alpha.length > 0) {
         alpha.sort((a, b) => a.valStr.localeCompare(b.valStr));
@@ -159,21 +167,21 @@ export const formatGroupLabel = (groups: string[]): string => {
              }
              return String.fromCharCode(Number(r));
         });
-        parts.push("Grupos " + ranges.join(", "));
+        parts.push("Grupos " + joinList(ranges));
     }
 
     // Process Numeric Ranges
     if (numeric.length > 0) {
         numeric.sort((a, b) => a.valNum - b.valNum);
         const ranges = getRanges(numeric.map(n => n.valNum));
-        parts.push("Grupos " + ranges.join(", "));
+        parts.push("Grupos " + joinList(ranges));
     }
     
     // Process Others
     if (others.length > 0) {
         others.sort((a, b) => a.valStr.localeCompare(b.valStr));
         // Use original cleaned string
-        parts.push("Grupos " + others.map(o => o.cleaned).join(", "));
+        parts.push("Grupos " + joinList(others.map(o => o.cleaned)));
     }
 
     return parts.join(" e ");
@@ -379,14 +387,14 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
         const dailyEntries = aulasByDay[dayName] || [];
         
         // --- Lógica de Agrupamento de Turmas ---
-        // Mapa para agrupar aulas idênticas (mesma disciplina e horário)
-        // A chave considera apenas Horário e Disciplina para mesclar grupos diferentes
+        // Mapa para agrupar aulas idênticas
+        // A chave agora inclui Sala para diferenciar turmas no mesmo horário/disciplina
         const groupedMap = new Map<string, { 
             horario_inicio: string;
             horario_fim: string;
             disciplina: string;
+            sala: string; // Adicionado para uso direto
             groups: Set<string>;
-            salas: Set<string>;
             professores: Set<string>;
             tipos: Set<string>;
             modulos: Set<string>;
@@ -394,16 +402,16 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
         }>();
 
         dailyEntries.forEach(entry => {
-            // Chave unificada para agrupar todos os grupos que tenham a mesma aula no mesmo horário
-            const key = `${entry.horario_inicio}|${entry.horario_fim}|${entry.disciplina}`;
+            // Chave inclui Sala para separar turmas fisicamente distintas
+            const key = `${entry.horario_inicio}|${entry.horario_fim}|${entry.disciplina}|${entry.sala}`;
             
             if (!groupedMap.has(key)) {
                 groupedMap.set(key, { 
                     horario_inicio: entry.horario_inicio,
                     horario_fim: entry.horario_fim,
                     disciplina: entry.disciplina,
+                    sala: entry.sala,
                     groups: new Set(),
-                    salas: new Set(),
                     professores: new Set(),
                     tipos: new Set(),
                     modulos: new Set(),
@@ -412,7 +420,6 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
             }
             const groupData = groupedMap.get(key)!;
             if (entry.grupo) groupData.groups.add(entry.grupo);
-            if (entry.sala) groupData.salas.add(entry.sala);
             if (entry.professor) groupData.professores.add(entry.professor);
             if (entry.tipo) groupData.tipos.add(entry.tipo);
             if (entry.modulo) groupData.modulos.add(entry.modulo);
@@ -430,9 +437,9 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
              return {
                 horario: `${data.horario_inicio} - ${data.horario_fim}`,
                 disciplina: data.disciplina,
-                sala: joinSet(data.salas),
+                sala: data.sala, // Sala é única por card agora
                 modulo: joinSet(data.modulos),
-                grupo: formattedGroup, // Usa o label formatado (ex: "Grupos A à D e Grupos 1 à 2")
+                grupo: formattedGroup,
                 originalGroups: groupArray, // Stores raw groups for title formatting
                 tipo: joinSet(data.tipos),
                 professor: joinSet(data.professores),
@@ -490,11 +497,54 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
 
 export const fetchSchedule = (
     periodo: string, 
-    allAulas: AulaEntry[]
+    allAulas: AulaEntry[],
+    modulo?: string,
+    grupo?: string,
+    eletiva?: string,
+    allEletivas: EletivaEntry[] = []
 ): Schedule | null => {
-    const matchingAulas = allAulas.filter(aula => 
+    // 1. Filtra pelo período (Obrigatório)
+    let matchingAulas = allAulas.filter(aula => 
         String(aula.periodo) === String(periodo)
     );
+
+    // 2. Filtra pelo Módulo (Opcional)
+    if (modulo && modulo.trim() !== '') {
+        matchingAulas = matchingAulas.filter(aula => 
+            aula.modulo === modulo
+        );
+    }
+
+    // 3. Filtra pelo Grupo (Opcional)
+    if (grupo && grupo.trim() !== '') {
+        matchingAulas = matchingAulas.filter(aula => 
+            aula.grupo === grupo
+        );
+    }
+
+    // 4. Adiciona Eletiva (Opcional)
+    if (eletiva && eletiva.trim() !== '' && allEletivas.length > 0) {
+        const selectedEletiva = allEletivas.find(e => e.disciplina === eletiva);
+        if (selectedEletiva) {
+            // Converte EletivaEntry para AulaEntry
+            // Assumimos que a eletiva pertence ao período selecionado visualmente no cronograma
+            const eletivaAsAula: AulaEntry = {
+                periodo: periodo,
+                modulo: 'Eletiva',
+                grupo: 'Eletiva',
+                dia_semana: selectedEletiva.dia_semana,
+                disciplina: selectedEletiva.disciplina,
+                sala: selectedEletiva.sala,
+                horario_inicio: selectedEletiva.horario_inicio,
+                horario_fim: selectedEletiva.horario_fim,
+                tipo: selectedEletiva.tipo,
+                professor: selectedEletiva.professor,
+                observacao: ''
+            };
+            matchingAulas = [...matchingAulas, eletivaAsAula];
+        }
+    }
+
     return groupAulasIntoSchedule(matchingAulas);
 };
 
@@ -541,6 +591,42 @@ export const getUniquePeriods = (allAulas: AulaEntry[]): string[] => {
     
     return uniquePeriods;
 };
+
+export const getUniqueModulos = (periodo: string, allAulas: AulaEntry[]): string[] => {
+    const filtered = allAulas.filter(a => String(a.periodo) === String(periodo));
+    const modulos = filtered.map(a => a.modulo).filter(m => m && m.trim() !== '');
+    return [...new Set(modulos)].sort();
+};
+
+export const getUniqueGrupos = (periodo: string, modulo: string, allAulas: AulaEntry[]): string[] => {
+    let filtered = allAulas.filter(a => String(a.periodo) === String(periodo));
+    
+    if (modulo && modulo.trim() !== '') {
+        filtered = filtered.filter(a => a.modulo === modulo);
+    }
+    
+    const grupos = filtered.map(a => a.grupo).filter(g => g && g.trim() !== '');
+    
+    // Sort logic: Try to sort numerically if possible, else alphabetically
+    const uniqueGrupos = [...new Set(grupos)];
+    return uniqueGrupos.sort((a, b) => {
+        // Remove prefix like "GRUPO - " for comparison
+        const cleanA = a.replace(/^(GRUPO|TURMA)(\s*[-–]\s*|\s+)/i, '').trim();
+        const cleanB = b.replace(/^(GRUPO|TURMA)(\s*[-–]\s*|\s+)/i, '').trim();
+        const numA = parseInt(cleanA, 10);
+        const numB = parseInt(cleanB, 10);
+        
+        if (!isNaN(numA) && !isNaN(numB) && String(numA) === cleanA && String(numB) === cleanB) {
+             return numA - numB;
+        }
+        return cleanA.localeCompare(cleanB);
+    });
+};
+
+export const getUniqueEletivas = (allEletivas: EletivaEntry[]): string[] => {
+    const eletivas = allEletivas.map(e => e.disciplina).filter(d => d && d.trim() !== '');
+    return [...new Set(eletivas)].sort();
+}
 
 export const updateDataFromExcel = async (file: File): Promise<{ aulasData: AulaEntry[], eventsData: Event[], eletivasData: EletivaEntry[], eventsSheetName: string | undefined }> => {
     return new Promise((resolve, reject) => {
