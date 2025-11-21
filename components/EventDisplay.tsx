@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import type { Event } from '../types';
 import { stringToColor } from '../services/colorService';
@@ -112,80 +113,143 @@ const EventDisplay: React.FC<EventDisplayProps> = ({ events, periodo }) => {
   
     setIsGeneratingPdf(true);
   
-    const pdfContainer = document.createElement('div');
-    pdfContainer.className = 'pdf-export-container';
-    
-    const watermark = document.createElement('img');
-    watermark.src = 'https://cdn.prod.website-files.com/65e07e5b264deb36f6e003d9/6883f05c26e613e478e32cd9_A.png';
-    watermark.alt = "Marca d'água Afya";
-    watermark.className = 'pdf-watermark';
-    pdfContainer.appendChild(watermark);
+    // 1. Create wrapper
+    const pdfHiddenWrapper = document.createElement('div');
+    pdfHiddenWrapper.className = 'pdf-hidden-wrapper';
+    document.body.appendChild(pdfHiddenWrapper);
 
-    const header = document.createElement('div');
-    header.className = 'pdf-header';
+    // Helper for watermark
+    const createWatermark = () => {
+        const img = document.createElement('img');
+        img.src = 'https://cdn.prod.website-files.com/65e07e5b264deb36f6e003d9/6883f05c26e613e478e32cd9_A.png';
+        img.className = 'pdf-watermark';
+        return img;
+    };
     
-    const logo = document.createElement('img');
-    logo.src = 'https://cdn.cookielaw.org/logos/309bef31-1bad-4222-a8de-b66feda5e113/e1bda879-fe71-4686-b676-cc9fbc711aee/fcb85851-ec61-4efb-bae5-e72fdeacac0e/AFYA-FACULDADEMEDICAS-logo.png';
-    logo.alt = 'Logo Afya Ciências Médicas';
-    logo.className = 'pdf-logo';
-    header.appendChild(logo);
+    // Helper for Header (Standardized)
+    const createHeader = () => {
+        const header = document.createElement('div');
+        header.className = 'pdf-header';
+        
+        const logo = document.createElement('img');
+        logo.src = 'https://cdn.cookielaw.org/logos/309bef31-1bad-4222-a8de-b66feda5e113/e1bda879-fe71-4686-b676-cc9fbc711aee/fcb85851-ec61-4efb-bae5-e72fdeacac0e/AFYA-FACULDADEMEDICAS-logo.png';
+        logo.alt = 'Logo Afya Ciências Médicas';
+        logo.className = 'pdf-logo';
+        header.appendChild(logo);
+        
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'pdf-header-info';
+        
+        const title = document.createElement('h1');
+        title.textContent = 'COORDENAÇÃO DO CURSO DE MEDICINA';
+        infoDiv.appendChild(title);
+        
+        const subTitle = document.createElement('p');
+        subTitle.textContent = 'Coordenador do Curso: Prof. Kristhea Karyne | Coordenadora Adjunta: Prof. Roberya Viana';
+        infoDiv.appendChild(subTitle);
+        
+        header.appendChild(infoDiv);
+        
+        return header;
+    };
 
-    const title = document.createElement('h1');
-    title.textContent = 'Calendário de Eventos';
-    header.appendChild(title);
-    pdfContainer.appendChild(header);
-    
-    const eventsTitle = document.createElement('h2');
-    eventsTitle.className = 'pdf-title';
-    eventsTitle.textContent = `Eventos para ${periodo}`;
-    pdfContainer.appendChild(eventsTitle);
-
+    // 2. Process chunks
+    // We will iterate through the DOM elements to respect the current filtering and sorting
     const contentClone = eventsContent.cloneNode(true) as HTMLElement;
-    contentClone.removeAttribute('id');
     const monthGroups = contentClone.querySelectorAll('.event-month-group-pdf');
-    monthGroups.forEach(group => {
+    
+    const CARDS_PER_PAGE = 12; // 3 columns * 4 rows
+
+    monthGroups.forEach((group) => {
+        const monthTitleEl = group.querySelector('h3');
+        const monthTitle = monthTitleEl ? monthTitleEl.textContent : '';
+        
+        // The grid in the DOM might have different classes, let's find the container with grid
         const grid = group.querySelector('.grid');
-        if (grid) {
-            grid.className = 'pdf-export-event-grid';
+        if (!grid) return;
+
+        const cards = Array.from(grid.children);
+        const totalCards = cards.length;
+        const totalPagesForMonth = Math.ceil(totalCards / CARDS_PER_PAGE);
+
+        for (let i = 0; i < totalPagesForMonth; i++) {
+            const start = i * CARDS_PER_PAGE;
+            const end = start + CARDS_PER_PAGE;
+            const chunk = cards.slice(start, end);
+
+            // Create Page Container
+            const pageContainer = document.createElement('div');
+            pageContainer.className = 'pdf-export-container';
+            
+            pageContainer.appendChild(createWatermark());
+            pageContainer.appendChild(createHeader());
+
+            // Page Title
+            const pageTitle = document.createElement('h2');
+            pageTitle.className = 'pdf-title';
+            let titleText = `Calendário de Eventos - ${periodo}`;
+            if (totalPagesForMonth > 1) {
+                 titleText += ` (${i + 1}/${totalPagesForMonth})`;
+            }
+            pageTitle.textContent = titleText;
+            pageContainer.appendChild(pageTitle);
+
+            // Content Wrapper
+            const monthWrapper = document.createElement('div');
+            monthWrapper.className = 'event-month-group-pdf';
+            
+            // Month Header (Always show which month these events belong to)
+            const monthHeader = document.createElement('h3');
+            // Copy styles from the original h3 (defined in index.html css for .pdf-export-container .event-month-group-pdf h3)
+            monthHeader.textContent = monthTitle + (i > 0 ? ' (Continuação)' : '');
+            monthWrapper.appendChild(monthHeader);
+
+            // Grid
+            const gridClone = document.createElement('div');
+            gridClone.className = 'pdf-export-event-grid'; // Uses the 3-column grid defined in CSS
+            
+            chunk.forEach(card => {
+                gridClone.appendChild(card.cloneNode(true));
+            });
+
+            monthWrapper.appendChild(gridClone);
+            pageContainer.appendChild(monthWrapper);
+            
+            pdfHiddenWrapper.appendChild(pageContainer);
         }
     });
-    pdfContainer.appendChild(contentClone);
 
-    document.body.appendChild(pdfContainer);
-
+    // 3. Render
     requestAnimationFrame(async () => {
       try {
         const { jsPDF } = window.jspdf;
-        const canvas = await html2canvas(pdfContainer, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff'
-        });
-        const imgData = canvas.toDataURL('image/png');
-
         const pdf = new jsPDF({
           orientation: 'landscape',
           unit: 'mm',
           format: 'a3',
         });
 
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        
-        const imgProps = pdf.getImageProperties(imgData);
-        const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
-        
-        let heightLeft = imgHeight;
-        let position = 0;
+        const pages = pdfHiddenWrapper.querySelectorAll('.pdf-export-container');
 
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
-        heightLeft -= pdfHeight;
+        for (let i = 0; i < pages.length; i++) {
+            const pageEl = pages[i] as HTMLElement;
+            
+            const canvas = await html2canvas(pageEl, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: '#ffffff'
+            });
 
-        while (heightLeft > 0) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
-          heightLeft -= pdfHeight;
+            const imgData = canvas.toDataURL('image/png');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const imgProps = pdf.getImageProperties(imgData);
+            const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+            if (i > 0) {
+                pdf.addPage();
+            }
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
         }
 
         const pdfUrl = pdf.output('bloburl');
@@ -195,7 +259,7 @@ const EventDisplay: React.FC<EventDisplayProps> = ({ events, periodo }) => {
         console.error('Erro ao gerar o PDF:', e);
         alert('Ocorreu um erro ao gerar o PDF. Tente novamente.');
       } finally {
-        document.body.removeChild(pdfContainer);
+        document.body.removeChild(pdfHiddenWrapper);
         setIsGeneratingPdf(false);
       }
     });
