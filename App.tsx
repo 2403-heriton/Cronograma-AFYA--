@@ -1,27 +1,39 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { fetchSchedule, getUniqueModulesForPeriod, fetchEvents, loadDataFromLocalStorage, getUniquePeriods, getUniqueGroupsForModule } from './services/scheduleService';
-import type { Schedule, ModuleSelection, Event, AulaEntry } from './types';
+
+import React, { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { fetchSchedule, fetchEvents, initializeAndLoadData, getUniquePeriods } from './services/scheduleService';
+import type { Schedule, Event, AulaEntry, EletivaEntry } from './types';
 import ScheduleForm from './components/ScheduleForm';
-import ScheduleDisplay from './components/ScheduleDisplay';
-import AssessmentDisplay from './components/AssessmentDisplay';
-import AfyaLogo from './components/icons/AfyaLogo';
 import SpinnerIcon from './components/icons/SpinnerIcon';
 import CalendarIcon from './components/icons/CalendarIcon';
-import ClockIcon from './components/icons/ClockIcon';
 import DataUploader from './components/DataUploader';
+import ErrorBoundary from './components/ErrorBoundary';
+
+// Lazy load display components for better performance
+const ScheduleDisplay = lazy(() => import('./components/ScheduleDisplay'));
+const EventDisplay = lazy(() => import('./components/EventDisplay'));
+
+// Definição da interface para os dados retornados pelo upload
+interface UploadData {
+  aulasData: AulaEntry[];
+  eventsData: Event[];
+  eletivasData: EletivaEntry[];
+  eventsSheetName?: string; 
+}
+
+const LAST_SEARCH_PERIODO_KEY = 'afya-last-periodo';
 
 const App: React.FC = () => {
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [allAulas, setAllAulas] = useState<AulaEntry[]>([]);
   const [allEvents, setAllEvents] = useState<Event[]>([]);
+  // allEletivas mantido para integridade do DataUploader, embora não usado na busca simplificada
+  const [allEletivas, setAllEletivas] = useState<EletivaEntry[]>([]);
 
   const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
   const [periodo, setPeriodo] = useState<string>('');
-  const [availableModules, setAvailableModules] = useState<string[]>([]);
-  const [selections, setSelections] = useState<ModuleSelection[]>([
-    { id: Date.now(), modulo: '', grupo: '' }
-  ]);
+  
   const [schedule, setSchedule] = useState<Schedule | null>(null);
-  const [events, setEvents] = useState<Event[] | null>(null);
+  const [events, setEvents] = useState<Event[] | null>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState<boolean>(false);
@@ -36,85 +48,40 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Carrega os dados do localStorage na inicialização e define as opções dinâmicas
+  // Carrega os dados do localStorage ou de arquivos na inicialização
   useEffect(() => {
-    const { aulas, events } = loadDataFromLocalStorage();
-    setAllAulas(aulas);
-    setAllEvents(events);
-
-    if (aulas.length > 0) {
-        const periods = getUniquePeriods(aulas);
-        setAvailablePeriods(periods);
-        if (periods.length > 0) {
-            setPeriodo(periods[0]);
+    const loadInitialData = async () => {
+        try {
+            const { aulas, events, eletivas } = await initializeAndLoadData();
+            setAllAulas(aulas);
+            setAllEvents(events);
+            setAllEletivas(eletivas);
+            
+            if (aulas.length > 0) {
+                const periods = getUniquePeriods(aulas);
+                setAvailablePeriods(periods);
+                
+                // --- Lógica do Local Storage para persistir a última busca ---
+                const savedPeriodo = localStorage.getItem(LAST_SEARCH_PERIODO_KEY);
+                if (savedPeriodo && periods.includes(savedPeriodo)) {
+                    setPeriodo(savedPeriodo);
+                } else if (periods.length > 0) {
+                    setPeriodo(periods[0]);
+                }
+            } else {
+                 setError("Nenhum dado de aulas encontrado. Por favor, use o modo de administrador para carregar uma planilha.");
+            }
+        } catch (err) {
+            console.error("Erro ao carregar dados iniciais:", err);
+            const error = err as Error;
+            setError(error.message || "Não foi possível carregar os dados. Tente atualizar a página.");
+        } finally {
+            setIsInitializing(false);
         }
-    }
+    };
+    
+    loadInitialData();
   }, []);
-
-  // Atualiza módulos e seleções quando o período ou os dados das aulas mudam
-  useEffect(() => {
-    if (!periodo || allAulas.length === 0) return;
-
-    setError(null);
-    const modules = getUniqueModulesForPeriod(periodo, allAulas);
-    setAvailableModules(modules);
-
-    setSelections(prevSelections => {
-      const firstModule = modules[0] || '';
-      
-      const updatedSelections = prevSelections.map(sel => {
-        const isModuloStillValid = modules.includes(sel.modulo);
-        const newModulo = isModuloStillValid ? sel.modulo : firstModule;
-        
-        const newAvailableGroups = getUniqueGroupsForModule(periodo, newModulo, allAulas);
-        const isGrupoStillValid = newAvailableGroups.includes(sel.grupo);
-        const newGrupo = isGrupoStillValid ? sel.grupo : (newAvailableGroups[0] || '');
-
-        return { ...sel, modulo: newModulo, grupo: newGrupo };
-      });
-      
-      if (updatedSelections.length === 0 && modules.length > 0) {
-         const firstGroups = getUniqueGroupsForModule(periodo, firstModule, allAulas);
-         return [{ id: Date.now(), modulo: firstModule, grupo: firstGroups[0] || ''}];
-      }
-
-      return updatedSelections;
-    });
-  }, [periodo, allAulas]);
-
-  const addSelection = () => {
-    const selectedModules = selections.map(s => s.modulo);
-    const nextAvailableModule = availableModules.find(m => !selectedModules.includes(m)) || '';
-    if (!nextAvailableModule) return; // Não adiciona se não houver módulos disponíveis
-
-    const nextAvailableGroups = getUniqueGroupsForModule(periodo, nextAvailableModule, allAulas);
-    const nextGroup = nextAvailableGroups[0] || '';
-
-    setSelections(prev => [
-      ...prev,
-      { id: Date.now(), modulo: nextAvailableModule, grupo: nextGroup }
-    ]);
-  };
-
-  const removeSelection = (id: number) => {
-    setSelections(prev => prev.filter(sel => sel.id !== id));
-  };
-
-  const updateSelection = (id: number, field: 'modulo' | 'grupo', value: string) => {
-    setSelections(prev => {
-      const newSelections = prev.map(sel => (sel.id === id ? { ...sel, [field]: value } : sel));
-      
-      if (field === 'modulo') {
-        const changedSelection = newSelections.find(s => s.id === id);
-        if (changedSelection) {
-          const newGroups = getUniqueGroupsForModule(periodo, value, allAulas);
-          changedSelection.grupo = newGroups[0] || ''; 
-        }
-      }
-      
-      return newSelections;
-    });
-  };
 
   const handlePeriodoChange = (newPeriodo: string) => {
     setPeriodo(newPeriodo);
@@ -134,144 +101,182 @@ const App: React.FC = () => {
     setView('schedule');
 
     try {
-      const selectionsPayload = selections.map(({ id, ...rest }) => rest);
-      const scheduleResult = fetchSchedule(periodo, selectionsPayload, allAulas);
-      const eventsResult = fetchEvents(periodo, selectionsPayload, allEvents);
-
-      if (scheduleResult && eventsResult) {
-        scheduleResult.forEach(dia => {
-          dia.aulas.forEach(aula => {
-            const matchingEvents = eventsResult.filter(event => 
-              event.disciplina === aula.disciplina && event.modulo === aula.modulo
-            );
-            if (matchingEvents.length > 0) {
-              aula.events = matchingEvents;
-            }
-          });
-        });
-      }
+      const scheduleResult = fetchSchedule(periodo, allAulas);
+      const eventsResult = fetchEvents(periodo, allEvents);
 
       setSchedule(scheduleResult);
       setEvents(eventsResult);
-    } catch (e: any) {
-      setError(e.message || "Ocorreu um erro desconhecido.");
+
+      // Salvar busca no localStorage
+      localStorage.setItem(LAST_SEARCH_PERIODO_KEY, periodo);
+      
+    } catch (err) {
+      console.error("Erro durante a busca:", err);
+      const error = err as Error;
+      setError(error.message || "Ocorreu um erro inesperado ao buscar o cronograma.");
     } finally {
       setIsLoading(false);
     }
-  }, [periodo, selections, allAulas, allEvents]);
-
-  const handleUploadSuccess = (data: { aulasData: AulaEntry[], eventsData: Event[] }) => {
+  }, [periodo, allAulas, allEvents]);
+  
+  const handleUploadSuccess = (data: UploadData) => {
     setAllAulas(data.aulasData);
     setAllEvents(data.eventsData);
-    setSchedule(null);
-    setEvents(null);
-    setSearched(false);
-    setError(null);
-    // Recarrega a página sem o parâmetro de admin para sair do modo de upload
-    window.history.replaceState({}, document.title, window.location.pathname);
-    setIsAdmin(false);
-
-    // Re-inicializa o estado do período após o upload
-    if (data.aulasData.length > 0) {
+    setAllEletivas(data.eletivasData);
+    // Força a recarga dos dados e re-renderização
+    setPeriodo(''); // Reseta para acionar o useEffect de período
+    setTimeout(() => {
         const periods = getUniquePeriods(data.aulasData);
         setAvailablePeriods(periods);
         if (periods.length > 0) {
             setPeriodo(periods[0]);
         }
-    } else {
-        setAvailablePeriods([]);
-        setPeriodo('');
-    }
+    }, 0);
+    setSchedule(null);
+    setEvents(null);
+    setSearched(false);
   };
 
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center text-center p-8 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+          <SpinnerIcon className="w-12 h-12 mb-4" />
+          <p className="text-xl font-semibold text-gray-200">Buscando cronograma...</p>
+          <p className="text-gray-400 mt-1">Isso pode levar um momento.</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="text-center p-8 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+          <p className="text-xl font-semibold text-red-400">Ocorreu um Erro</p>
+          <p className="text-md mt-2 text-gray-300">{error}</p>
+        </div>
+      );
+    }
+    
+    if (!searched) {
+      return (
+        <div className="text-center p-8 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+          <CalendarIcon className="w-12 h-12 mx-auto text-gray-500 mb-4" />
+          <p className="text-xl font-semibold text-gray-200">Seu cronograma está a um clique de distância.</p>
+          <p className="text-md mt-1 text-gray-400">
+            Selecione o período acima e clique em "Buscar Cronograma" para visualizar suas aulas e eventos.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <Suspense fallback={
+        <div className="flex flex-col items-center justify-center text-center p-8 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+            <SpinnerIcon className="w-12 h-12 mb-4" />
+            <p className="text-lg font-semibold text-gray-200">Carregando visualização...</p>
+        </div>
+      }>
+        <div className="flex justify-center mb-6 space-x-2 bg-slate-800 p-1.5 rounded-full border border-slate-700 w-full max-w-sm mx-auto">
+          <button
+            onClick={() => setView('schedule')}
+            className={`flex-1 px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${view === 'schedule' ? 'bg-afya-blue text-white shadow-md' : 'text-gray-400 hover:bg-slate-700'}`}
+            aria-current={view === 'schedule'}
+          >
+            Cronograma
+          </button>
+          <button
+            onClick={() => setView('events')}
+            disabled={!events || events.length === 0}
+            className={`flex-1 px-4 py-2 rounded-full text-sm font-semibold transition-colors duration-200 ${view === 'events' ? 'bg-afya-pink text-white shadow-md' : 'text-gray-400 hover:bg-slate-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+            aria-current={view === 'events'}
+          >
+            Eventos
+          </button>
+        </div>
+        {view === 'schedule' ? (
+            <ScheduleDisplay 
+              schedule={schedule} 
+              periodo={periodo}
+            />
+          ) : (
+            <EventDisplay events={events} periodo={periodo} />
+          )}
+      </Suspense>
+    );
+  };
+
+  if (isInitializing) {
+     return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <SpinnerIcon className="w-16 h-16" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen font-sans flex flex-col bg-gray-900">
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/70 to-transparent z-10"></div>
-        <img 
-          src="https://cdn.prod.website-files.com/65b125bdd0407a7ed7dd8874/65b125bdd0407a7ed7dd8b9f_Medica-A-Gradu.png" 
-          alt="Estudante de Medicina Afya"
-          className="w-full h-[450px] object-cover object-top"
-        />
-        <div className="absolute inset-0 flex flex-col justify-center items-center text-center z-20 -mt-8">
-          <AfyaLogo className="w-64 h-auto mb-2" />
-          <p className="text-gray-300 tracking-wide text-lg">Faculdade de Ciências Médicas - Paraiba</p>
-          <p className="text-lg md:text-xl text-gray-200 mt-4 text-shadow-md">Consulte seu cronograma de aulas e eventos.</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-900 text-gray-300 font-sans">
+        {/* Header */}
+        <header className="relative text-white text-center shadow-lg overflow-hidden h-[450px] flex flex-col justify-end items-center">
+             {/* Background Image and Overlay */}
+            <div className="absolute inset-0 z-0">
+                <img 
+                    src="https://cdn.prod.website-files.com/65b125bdd0407a7ed7dd8874/65b125bdd0407a7ed7dd8b9f_Medica-A-Gradu.png" 
+                    alt="Profissionais de saúde em ambiente acadêmico" 
+                    className="w-full h-full object-cover object-top" 
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent"></div>
+            </div>
+            
+            {/* Header Content */}
+            <div className="relative z-10 container mx-auto px-4 mb-28">
+                <img 
+                    src="https://d9hhrg4mnvzow.cloudfront.net/institucional.afya.com.br/marca-e-cultura/1626d798-afya-faculdade-de-ciencias-medicas-branca-2_10ky04y0c004y000000000.png" 
+                    alt="Logo Afya" 
+                    className="h-28 mx-auto mb-4"
+                />
+                <h1 className="text-xl md:text-2xl font-extrabold tracking-tight" style={{ textShadow: '2px 2px 6px rgba(0,0,0,0.6)' }}>
+                    Faculdade de Ciências Médicas - Paraíba
+                </h1>
+                <p className="mt-3 text-sm md:text-base text-gray-200 max-w-2xl mx-auto" style={{ textShadow: '1px 1px 4px rgba(0,0,0,0.6)' }}>
+                    Consulte seu cronograma de aulas e eventos.
+                </p>
+            </div>
+        </header>
 
-      <main className="w-full max-w-6xl mx-auto flex-grow px-4 sm:px-6 lg:px-8 pb-8 -mt-32 z-30 relative">
-        <ScheduleForm
-          periodo={periodo}
-          setPeriodo={handlePeriodoChange}
-          availablePeriods={availablePeriods}
-          selections={selections}
-          availableModules={availableModules}
-          allAulas={allAulas}
-          addSelection={addSelection}
-          removeSelection={removeSelection}
-          updateSelection={updateSelection}
-          onSearch={handleSearch}
-          isLoading={isLoading}
-        />
+        <main className="relative p-4 md:p-8 -mt-24">
+            <div className="max-w-7xl mx-auto">
+              <ErrorBoundary>
+                  <div className="flex flex-col gap-8">
+                      {/* Formulário de Busca (agora sempre no topo) */}
+                      <div>
+                          <ScheduleForm
+                            periodo={periodo}
+                            setPeriodo={handlePeriodoChange}
+                            availablePeriods={availablePeriods}
+                            onSearch={handleSearch}
+                            isLoading={isLoading}
+                          />
+                          {isAdmin && (
+                              <div className="mt-8">
+                                  <DataUploader onUploadSuccess={handleUploadSuccess} />
+                              </div>
+                          )}
+                      </div>
+                      
+                      {/* Conteúdo do Cronograma/Eventos (agora sempre abaixo) */}
+                      <div>
+                        {renderContent()}
+                      </div>
+                  </div>
+              </ErrorBoundary>
+            </div>
+        </main>
         
-        {/* --- ÁREA DE RESULTADOS --- */}
-        <div className="mt-10 min-h-[300px] w-full">
-          {isLoading && (
-            <div className="flex flex-col items-center justify-center text-center text-white pt-10">
-              <SpinnerIcon className="w-12 h-12 mb-4" />
-              <p className="text-lg font-semibold">Buscando seu cronograma...</p>
-              <p className="text-sm text-gray-400">Isso pode levar alguns segundos.</p>
-            </div>
-          )}
-          {error && (
-            <div className="bg-afya-pink/10 border border-afya-pink/50 text-red-300 p-4 rounded-xl shadow-lg" role="alert">
-              <p className="font-bold">Erro!</p>
-              <p>{error}</p>
-            </div>
-          )}
-          {searched && !isLoading && !error && (
-             <>
-              <div className="mb-6 flex justify-center border-b border-gray-700">
-                <button
-                  key="schedule-view-btn"
-                  onClick={() => setView('schedule')}
-                  className={`flex items-center gap-2 px-6 py-3 font-semibold text-lg transition-colors duration-200 ${view === 'schedule' ? 'text-afya-blue border-b-2 border-afya-blue' : 'text-gray-400 hover:text-white'}`}
-                >
-                  <ClockIcon className="w-5 h-5" />
-                  Horário de Aulas
-                </button>
-                <button
-                  key="events-view-btn"
-                  onClick={() => setView('events')}
-                  className={`flex items-center gap-2 px-6 py-3 font-semibold text-lg transition-colors duration-200 ${view === 'events' ? 'text-afya-pink border-b-2 border-afya-pink' : 'text-gray-400 hover:text-white'}`}
-                >
-                  <CalendarIcon className="w-5 h-5" />
-                  Calendário de Eventos
-                </button>
-              </div>
-
-              {view === 'schedule' ? (
-                <ScheduleDisplay schedule={schedule} />
-              ) : (
-                <AssessmentDisplay events={events} />
-              )}
-            </>
-          )}
-          {!searched && !isLoading && (
-             <div className="text-center text-gray-500 p-8 bg-gray-800/50 rounded-2xl shadow-sm border border-gray-700">
-                <p className="text-lg">Seu cronograma e eventos aparecerão aqui após a busca.</p>
-                <p className="text-sm mt-2">Use o formulário acima para selecionar seu período, módulo e grupo.</p>
-            </div>
-          )}
-        </div>
-      </main>
-
-      <footer className="w-full text-center py-6 text-gray-500 text-sm mt-auto">
-        {isAdmin && <DataUploader onUploadSuccess={handleUploadSuccess} />}
-        <p className="mt-2">&copy; {new Date().getFullYear()} Afya Paraíba. Todos os direitos reservados.</p>
-      </footer>
+        <footer className="text-center py-6 mt-8 border-t border-slate-700">
+            <p className="text-sm text-gray-400">
+                © 2025 Afya Paraíba. Todos os direitos reservados.
+            </p>
+        </footer>
     </div>
   );
 };
