@@ -1,30 +1,182 @@
-
 [
   {
-    "modulo": "LIBRAS",
-    "dia_semana": "Sexta-feira",
-    "horario_inicio": "13:00",
-    "horario_fim": "14:40",
-    "professor": "Prof. Eletiva 1",
-    "sala": "Sala Eletiva 1",
-    "tipo": "Teórica"
+    "disciplina": "BASES DA ACUPUNTURA",
+    "dia_semana": "Segunda-feira",
+    "sala": "Sala1",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Vina Del Mar"
   },
   {
-    "modulo": "Medicina e Arte",
-    "dia_semana": "Sexta-feira",
-    "horario_inicio": "15:00",
-    "horario_fim": "16:40",
-    "professor": "Prof. Eletiva 2",
-    "sala": "Sala Eletiva 2",
-    "tipo": "Prática"
+    "disciplina": "CUIDADOS PALIATIVOS",
+    "dia_semana": "Segunda-feira",
+    "sala": "Sala 2",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Rachel Foncesca"
   },
   {
-    "modulo": "Gestão em Saúde",
+    "disciplina": "ESPIRITUALIDADE EM SAÚDE",
+    "dia_semana": "Segunda-feira",
+    "sala": "Sala 2",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Rachel Foncesca"
+  },
+  {
+    "disciplina": "MEDICINA LEGAL",
+    "dia_semana": "Segunda-feira",
+    "sala": "Sala 3",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Silvana"
+  },
+  {
+    "disciplina": "EDUCAÇÃO POPULAR EM SAÚDE",
+    "dia_semana": "Terça-feira",
+    "sala": "Sala 3",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Sandra Fernandes"
+  },
+  {
+    "disciplina": "METODOLOGIA DO ESTUDO INDIVIDUAL",
+    "dia_semana": "Terça-feira",
+    "sala": "Sala 2",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Rosa Camila"
+  },
+  {
+    "disciplina": "EDUCAÇÃO AMBIENTAL E SUSTENTABILIDADE",
     "dia_semana": "Quarta-feira",
-    "horario_inicio": "18:00",
-    "horario_fim": "19:40",
-    "professor": "Prof. Eletiva 3",
-    "sala": "Online",
-    "tipo": "Teórica"
+    "sala": "Sala 1",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Vina Del Mar"
+  },
+  {
+    "disciplina": "ONCOLOGIA",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 2",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Ana Silvia Suassuna"
+  },
+  {
+    "disciplina": "FITOTERAPIA",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 2",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Ana Silvia Suassuna"
+  },
+  {
+    "disciplina": "ATENÇÃO PRIMÁRIA EM SAÚDE",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 1",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Luisiane Avila"
+  },
+  {
+    "disciplina": "PRÁTICAS INTEGRATIVAS E COMPLEMENTARES EM SAÚDE",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 1",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Luisiane Avila"
+  },
+  {
+    "disciplina": "COMUNICAÇÃO INTERPESSOAL EM SAÚDE",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 3",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Nubia Kelly"
+  },
+  {
+    "disciplina": "FUNDAMENTOS BÁSICOS DA HOMEOPATIA",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 3",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Nubia Kelly"
+  },
+  {
+    "disciplina": "ESPIRITUALIDADE EM SAÚDE",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 4",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Vinicius Paiva"
+  },
+  {
+    "disciplina": "GESTÃO E EMPREDEDORISMO NA MEDICINA",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 4",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Felipe Gurgel"
+  },
+  {
+    "disciplina": "CUIDADOS PALIATIVOS",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 5",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Nolan Palma"
+  },
+  {
+    "disciplina": "FUNDAMENTOS DA FARMACOLOGIA CLÍNICA",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 6",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Ciberio Landim"
+  },
+  {
+    "disciplina": "BASES DA FARMACOLOGIA",
+    "dia_semana": "Quinta-feira",
+    "sala": "Sala 6",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Ciberio Landim"
+  },
+  {
+    "disciplina": "LIBRAS",
+    "dia_semana": "Sexta-feira",
+    "sala": "Sala 1",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Rosangela Santos"
+  },
+  {
+    "disciplina": "FINANÇAS EM SAÚDE",
+    "dia_semana": "Sexta-feira",
+    "sala": "Sala 2",
+    "horario_inicio": "17:00",
+    "horario_fim": "19:00",
+    "tipo": "Teórica",
+    "professor": "Rodrigo Marmo"
   }
 ]
