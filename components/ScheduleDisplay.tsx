@@ -77,16 +77,19 @@ const FreeSlotCard: React.FC<{ aula: Aula, isFullDay?: boolean }> = ({ aula, isF
       : 'bg-emerald-900/60 border-emerald-800 text-emerald-300'
     }`
   }>
-    <div className={`flex items-center gap-2 ${isFullDay ? 'mb-2' : 'mb-1'}`}>
-      <CoffeeIcon className={isFullDay ? 'w-6 h-6' : 'w-5 h-5'} />
-      <BookIcon className={isFullDay ? 'w-6 h-6' : 'w-5 h-5'} />
+    <div className={`flex items-center gap-2 ${isFullDay ? 'mb-3' : 'mb-2'}`}>
+      <CoffeeIcon className={isFullDay ? 'w-8 h-8' : 'w-6 h-6'} />
+      <BookIcon className={isFullDay ? 'w-8 h-8' : 'w-6 h-6'} />
     </div>
-    <p className={`font-semibold ${isFullDay ? 'text-lg' : 'text-sm'}`}>Horário Livre</p>
-    <p className={`${isFullDay ? 'text-sm' : 'text-xs'}`}>{aula.horario}</p>
+    <p className={`font-bold uppercase tracking-wide ${isFullDay ? 'text-xl' : 'text-base'}`}>Horário Livre</p>
+    <p className={`font-medium mb-2 ${isFullDay ? 'text-lg' : 'text-sm'}`}>{aula.horario}</p>
+    
     {aula.grupo && (
-        <p className={`font-bold mt-1 ${isFullDay ? 'text-sm' : 'text-xs'} text-emerald-200`}>
-            Para: {aula.grupo}
-        </p>
+        <div className={`w-full px-3 py-2 rounded-md bg-emerald-800/50 border border-emerald-700/50 mt-1`}>
+             <p className={`font-bold text-white leading-snug break-words whitespace-normal ${isFullDay ? 'text-lg' : 'text-sm'}`}>
+                Para: {aula.grupo}
+            </p>
+        </div>
     )}
   </div>
 );
