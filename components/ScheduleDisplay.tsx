@@ -70,7 +70,7 @@ const AulaCard: React.FC<{ aula: Aula }> = ({ aula }) => {
 };
 
 // Card informativo para os intervalos livres - com estilo para dia inteiro
-const FreeSlotCard: React.FC<{ horario: string, isFullDay?: boolean }> = ({ horario, isFullDay = false }) => (
+const FreeSlotCard: React.FC<{ aula: Aula, isFullDay?: boolean }> = ({ aula, isFullDay = false }) => (
   <div className={`rounded-lg border text-center p-3 flex flex-col items-center justify-center free-slot-card
     ${isFullDay 
       ? 'bg-emerald-950 border-emerald-800 text-emerald-400 flex-grow min-h-[200px]' 
@@ -82,13 +82,19 @@ const FreeSlotCard: React.FC<{ horario: string, isFullDay?: boolean }> = ({ hora
       <BookIcon className={isFullDay ? 'w-6 h-6' : 'w-5 h-5'} />
     </div>
     <p className={`font-semibold ${isFullDay ? 'text-lg' : 'text-sm'}`}>Horário Livre</p>
-    <p className={`${isFullDay ? 'text-sm' : 'text-xs'}`}>{horario}</p>
+    <p className={`${isFullDay ? 'text-sm' : 'text-xs'}`}>{aula.horario}</p>
+    {aula.grupo && (
+        <p className={`font-bold mt-1 ${isFullDay ? 'text-sm' : 'text-xs'} text-emerald-200`}>
+            Para: {aula.grupo}
+        </p>
+    )}
   </div>
 );
 
 
 // Card do dia, que agrupa os cards de aula
 const DiaCard: React.FC<{ diaDeAula: DiaDeAula }> = ({ diaDeAula }) => {
+  // Verifica se só existe 1 item e se ele é slot livre para dizer se o dia está totalmente livre
   const isFullDayFree = diaDeAula.aulas.length === 1 && diaDeAula.aulas[0].isFreeSlot;
 
   return (
@@ -101,7 +107,7 @@ const DiaCard: React.FC<{ diaDeAula: DiaDeAula }> = ({ diaDeAula }) => {
           aula.isFreeSlot ? (
             <FreeSlotCard 
               key={`free-${diaDeAula.dia}-${index}`} 
-              horario={aula.horario} 
+              aula={aula}
               isFullDay={isFullDayFree} 
             />
           ) : (

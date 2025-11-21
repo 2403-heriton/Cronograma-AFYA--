@@ -369,6 +369,15 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
         return hours * 60 + minutes;
     };
 
+    // 1. Identifica TODOS os grupos presentes no contexto filtrado.
+    // Isso é crucial para gerar horários livres para grupos que não têm aula em um dia específico.
+    const allContextGroups = new Set<string>();
+    aulas.forEach(entry => {
+        if (entry.grupo && entry.grupo.trim() !== '') {
+            allContextGroups.add(entry.grupo);
+        }
+    });
+
     // Agrupa por dia
     const aulasByDay = aulas.reduce<Record<string, AulaEntry[]>>((acc, aulaEntry) => {
         const dia = aulaEntry.dia_semana;
@@ -387,13 +396,11 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
         const dailyEntries = aulasByDay[dayName] || [];
         
         // --- Lógica de Agrupamento de Turmas ---
-        // Mapa para agrupar aulas idênticas
-        // A chave agora inclui Sala para diferenciar turmas no mesmo horário/disciplina
         const groupedMap = new Map<string, { 
             horario_inicio: string;
             horario_fim: string;
             disciplina: string;
-            sala: string; // Adicionado para uso direto
+            sala: string;
             groups: Set<string>;
             professores: Set<string>;
             tipos: Set<string>;
@@ -402,7 +409,6 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
         }>();
 
         dailyEntries.forEach(entry => {
-            // Chave inclui Sala para separar turmas fisicamente distintas
             const key = `${entry.horario_inicio}|${entry.horario_fim}|${entry.disciplina}|${entry.sala}`;
             
             if (!groupedMap.has(key)) {
@@ -426,21 +432,20 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
             if (entry.observacao) groupData.observacoes.add(entry.observacao);
         });
 
-        // Converte o mapa de volta para objetos de Aula e inclui metadados de tempo
-        const mergedAulas = Array.from(groupedMap.values()).map((data) => {
+        const joinSet = (set: Set<string>) => Array.from(set).filter(s => s.trim() !== '').join(' / ');
+
+        // Aulas "Merged" (Aulas Reais)
+        const mergedAulas: Aula[] = Array.from(groupedMap.values()).map((data) => {
              const groupArray = Array.from(data.groups);
              const formattedGroup = formatGroupLabel(groupArray);
-             
-             // Helper to join sets into a string with separator
-             const joinSet = (set: Set<string>) => Array.from(set).filter(s => s.trim() !== '').join(' / ');
 
              return {
                 horario: `${data.horario_inicio} - ${data.horario_fim}`,
                 disciplina: data.disciplina,
-                sala: data.sala, // Sala é única por card agora
+                sala: data.sala,
                 modulo: joinSet(data.modulos),
                 grupo: formattedGroup,
-                originalGroups: groupArray, // Stores raw groups for title formatting
+                originalGroups: groupArray,
                 tipo: joinSet(data.tipos),
                 professor: joinSet(data.professores),
                 observacao: joinSet(data.observacoes),
@@ -449,45 +454,78 @@ const groupAulasIntoSchedule = (aulas: AulaEntry[]): Schedule => {
              };
         });
 
-        const sortedAulas = mergedAulas
-            .filter(aula => aula.startMinutes > 0 && aula.endMinutes > 0 && aula.endMinutes > aula.startMinutes)
-            .sort((a, b) => a.startMinutes - b.startMinutes || a.endMinutes - b.endMinutes);
+        // --- NOVA LÓGICA DE HORÁRIO LIVRE POR GRUPO ---
+        const freeSlotsMap = new Map<string, string[]>(); // Key: "start|end", Value: [group1, group2, ...]
 
-        const dayScheduleWithGaps: Aula[] = [];
-        let currentTime = DAY_START_MINUTES;
+        // 2. Para cada grupo DO CONTEXTO GERAL, calcula seus horários livres NESTE DIA.
+        allContextGroups.forEach(group => {
+            // Encontra horários ocupados para este grupo NESTE DIA
+            const busyTimes = mergedAulas
+                .filter(aula => aula.originalGroups && aula.originalGroups.includes(group))
+                .map(aula => ({ start: aula.startMinutes || 0, end: aula.endMinutes || 0 }))
+                .sort((a, b) => a.start - b.start);
 
-        // Adiciona os intervalos livres entre as aulas.
-        for (const aula of sortedAulas) {
-            if (aula.startMinutes > currentTime) {
-                dayScheduleWithGaps.push({
-                    isFreeSlot: true,
-                    disciplina: 'Horário Livre',
-                    horario: `${formatMinutes(currentTime)} - ${formatMinutes(aula.startMinutes)}`,
-                    sala: '',
-                    modulo: '',
-                });
-            }
+            // Calcula lacunas
+            let cursor = DAY_START_MINUTES;
             
-            dayScheduleWithGaps.push(aula);
-            // Ensure that with overlapping classes, we use the latest end time
-            // to correctly calculate the next free slot.
-            currentTime = Math.max(currentTime, aula.endMinutes);
-        }
+            // Helper para adicionar slot se válido
+            const addSlot = (start: number, end: number) => {
+                if (end > start) {
+                    const key = `${start}|${end}`;
+                    if (!freeSlotsMap.has(key)) {
+                        freeSlotsMap.set(key, []);
+                    }
+                    freeSlotsMap.get(key)!.push(group);
+                }
+            };
 
-        // Adiciona o intervalo livre final, se houver, até o fim do dia.
-        if (currentTime < DAY_END_MINUTES) {
-            dayScheduleWithGaps.push({
+            for (const busy of busyTimes) {
+                if (busy.start > cursor) {
+                    addSlot(cursor, busy.start);
+                }
+                // Avança cursor apenas se o fim da aula for maior que o cursor atual
+                if (busy.end > cursor) {
+                    cursor = busy.end;
+                }
+            }
+
+            // Verifica tempo livre no final do dia
+            if (cursor < DAY_END_MINUTES) {
+                addSlot(cursor, DAY_END_MINUTES);
+            }
+        });
+
+        // 3. Converte os slots livres agrupados em objetos Aula
+        const freeAulas: Aula[] = [];
+        freeSlotsMap.forEach((groups, key) => {
+            const [start, end] = key.split('|').map(Number);
+            
+            // Formata os grupos para exibição (ex: "Grupos 1 à 4")
+            const formattedGroupLabel = formatGroupLabel(groups);
+
+            freeAulas.push({
                 isFreeSlot: true,
                 disciplina: 'Horário Livre',
-                horario: `${formatMinutes(currentTime)} - ${formatMinutes(DAY_END_MINUTES)}`,
+                horario: `${formatMinutes(start)} - ${formatMinutes(end)}`,
                 sala: '',
                 modulo: '',
+                grupo: formattedGroupLabel, // Passa a string formatada
+                originalGroups: groups,
+                startMinutes: start,
+                endMinutes: end
             });
-        }
+        });
+
+        // 4. Combina aulas reais com aulas livres e ordena
+        const finalDayAulas = [...mergedAulas, ...freeAulas].sort((a, b) => {
+            const startDiff = (a.startMinutes || 0) - (b.startMinutes || 0);
+            if (startDiff !== 0) return startDiff;
+            return (a.endMinutes || 0) - (b.endMinutes || 0);
+        });
 
         return {
             dia: dayName,
-            aulas: dayScheduleWithGaps,
+            aulas: finalDayAulas,
         };
     });
     

@@ -11,6 +11,8 @@ export interface Aula {
   observacao?: string;
   grupo?: string;
   originalGroups?: string[]; // Stores the list of original groups before formatting
+  startMinutes?: number;
+  endMinutes?: number;
 }
 
 // Representa uma entrada de aula individual como está no aulas.json
